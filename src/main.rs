@@ -43,6 +43,8 @@ async fn main() {
             RunningAs::Root => match search(&name).await {
                 true => {
                     package_found(&name);
+                    print!("{}", "Do you want to install it? ".bold());
+                    io::stdout().flush().unwrap();
                     match ask(Ask::Yes) {
                         Some(a) => match a {
                             Ask::Yes => {
@@ -53,11 +55,12 @@ async fn main() {
 
                                 install(&name).await;
 
+                                bar.set_message("| Installed");
                                 bar.finish();
                             }
                             Ask::No => (),
                         },
-                        None => println!("{}", "Unknown action".red()),
+                        None => unknown_action(),
                     }
                 }
                 false => package_not_found(&name),
@@ -65,20 +68,29 @@ async fn main() {
             _ => root_required(),
         },
         Select::Remove { name } => match check() {
-            RunningAs::Root => {
-                let path = "/lib/ice/packages/";
-
-                match fs::read_dir(&path)
-                    .unwrap()
-                    .find(|f| f.as_ref().unwrap().file_name().to_str().unwrap() == &name)
-                {
-                    Some(_) => {
-                        remove(&name);
-                        fs::remove_dir_all(&path).unwrap();
+            RunningAs::Root => match fs::read_dir(PKGSPATH) {
+                Ok(mut d) => {
+                    match d.find(|f| f.as_ref().unwrap().file_name().to_str().unwrap() == &name) {
+                        Some(_) => {
+                            package_found(&name);
+                            print!("{}", "Do you want to remove it? ".bold());
+                            io::stdout().flush().unwrap();
+                            match ask(Ask::Yes) {
+                                Some(a) => match a {
+                                    Ask::Yes => {
+                                        remove(&name);
+                                        removed_pkg(&name);
+                                    }
+                                    _ => {}
+                                },
+                                None => unknown_action(),
+                            }
+                        }
+                        None => pkg_not_installed(&name),
                     }
-                    None => pkg_not_installed(&name),
-                };
-            }
+                }
+                Err(_) => no_pkg_installed(),
+            },
             _ => root_required(),
         },
         Select::Search { name } => match search(&name).await {
@@ -88,11 +100,11 @@ async fn main() {
     }
 }
 
-fn package_not_found<S: Into<String>>(pkg: S) {
+fn package_not_found(pkg: impl Into<String>) {
     println!("Package {} not found", pkg.into().red());
 }
 
-fn package_found<S: Into<String>>(pkg: S) {
+fn package_found(pkg: impl Into<String>) {
     println!("Found package {}", pkg.into().green());
 }
 
@@ -134,5 +146,18 @@ fn root_required() {
 
 fn pkg_not_installed(pkg: impl Into<String>) {
     let pkg = pkg.into();
-    println!("Package {} is not installed", &pkg.red());
+    println!("Package {} is not installed", pkg.red());
+}
+
+fn no_pkg_installed() {
+    println!("{}", "You have no packages installed".red())
+}
+
+fn removed_pkg(pkg: impl Into<String>) {
+    let pkg = pkg.into();
+    println!("Removed {} package", pkg.green());
+}
+
+fn unknown_action() {
+    println!("{}", "Unknown action".red());
 }

@@ -2,6 +2,8 @@ use octocrab::models::repos::Content;
 use std::{fs, process::Command};
 use strace_parse::raw::{Call, parse};
 
+pub static PKGSPATH: &str = "/usr/lib/ice/packages/";
+
 pub async fn contents() -> Vec<Content> {
     octocrab::instance()
         .repos("Glacite", "packages")
@@ -50,7 +52,7 @@ pub async fn install(pkg: impl Into<String>) {
             .arg("-f")
             .arg("-qq")
             .arg("-e")
-            .arg("trace=mkdir,creat")
+            .arg("trace=mkdir")
             .arg("-e")
             .arg("signal=!SIGCHLD")
             .arg("sh")
@@ -80,7 +82,7 @@ pub async fn install(pkg: impl Into<String>) {
             }
         }
 
-        let pkgpath = format!("/lib/ice/packages/{}/", &pkg);
+        let pkgpath = format!("{PKGSPATH}{}/", &pkg);
 
         fs::create_dir_all(&pkgpath).unwrap();
         fs::write(format!("{}remove.sh", &pkgpath), &remove).unwrap();
@@ -89,13 +91,13 @@ pub async fn install(pkg: impl Into<String>) {
 
 pub fn remove(pkg: impl Into<String>) {
     let pkg = pkg.into();
-    let pkgpath = format!("/lib/ice/packages/{}/", &pkg);
-    let script = format!("{}remove.sh", &pkgpath);
+    let pkgpath = format!("{PKGSPATH}{}/", &pkg);
+    let script = format!("{pkgpath}{}remove.sh", &pkg);
 
     let mut command = Command::new("sh");
     command.arg(&script).output().unwrap();
 
-    fs::remove_dir_all(&pkgpath).unwrap();
+    fs::remove_dir_all(pkgpath).unwrap();
 }
 
 async fn script(contents: Vec<Content>) -> String {
