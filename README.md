@@ -2,4 +2,4 @@
 
 **requires**:\
 `strace`\
-`curl`\
+`curl`
