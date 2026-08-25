@@ -1,5 +1,5 @@
 # ice - package manager
 
-**requires**:
-`strace`
-`curl`
+**requires**:\
+`strace`\
+`curl`\
