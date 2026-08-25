@@ -3,14 +3,18 @@ use crate::funcs::*;
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressStyle};
 use std::{
-    env,
+    env, fs,
     io::{self, Write},
     time::Duration,
 };
 use sudo::{RunningAs, check};
 use tokio;
+
+static LOAD: &[&str; 13] = &[
+    "⠀⠙", "⠀⠸", "⠀⢰", "⠀⣠", "⢀⣀", "⣀⡀", "⣄⠀", "⡆⠀", "⠇⠀", "⠋⠀", "⠉⠁", "⠈⠉", "✓",
+];
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -21,6 +25,7 @@ struct Args {
 #[derive(Subcommand, Debug)]
 enum Select {
     Install { name: String },
+    Remove { name: String },
     Search { name: String },
 }
 
@@ -42,12 +47,13 @@ async fn main() {
                         Some(a) => match a {
                             Ask::Yes => {
                                 let bar = ProgressBar::new_spinner();
+                                bar.set_style(ProgressStyle::default_spinner().tick_strings(LOAD));
                                 bar.enable_steady_tick(Duration::from_millis(100));
-                                bar.set_prefix("Installing");
+                                bar.set_message("| Installing...");
 
                                 install(&name).await;
 
-                                loop {}
+                                bar.finish();
                             }
                             Ask::No => (),
                         },
@@ -56,13 +62,24 @@ async fn main() {
                 }
                 false => package_not_found(&name),
             },
-            _ => {
-                let mut command = env::args().collect::<Vec<_>>().join(" ");
-                command = format!("{} {command}", "sudo".green());
+            _ => root_required(),
+        },
+        Select::Remove { name } => match check() {
+            RunningAs::Root => {
+                let path = "/lib/ice/packages/";
 
-                println!("{}", "Root privileges required".red());
-                println!("{} {}", "Try:".bold(), command)
+                match fs::read_dir(&path)
+                    .unwrap()
+                    .find(|f| f.as_ref().unwrap().file_name().to_str().unwrap() == &name)
+                {
+                    Some(_) => {
+                        remove(&name);
+                        fs::remove_dir_all(&path).unwrap();
+                    }
+                    None => pkg_not_installed(&name),
+                };
             }
+            _ => root_required(),
         },
         Select::Search { name } => match search(&name).await {
             true => package_found(&name),
@@ -105,4 +122,17 @@ fn ask_message(default: &Ask) -> String {
         Ask::Yes => "[Y/n]".into(),
         Ask::No => "[y/N]".into(),
     }
+}
+
+fn root_required() {
+    let mut command = env::args().collect::<Vec<_>>().join(" ");
+    command = format!("{} {command}", "sudo".green());
+
+    println!("{}", "Root privileges required".red());
+    println!("{} {}", "Try:".bold(), command)
+}
+
+fn pkg_not_installed(pkg: impl Into<String>) {
+    let pkg = pkg.into();
+    println!("Package {} is not installed", &pkg.red());
 }

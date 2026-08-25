@@ -1,5 +1,6 @@
 use octocrab::models::repos::Content;
-use std::process::Command;
+use std::{fs, process::Command};
+use strace_parse::raw::{Call, parse};
 
 pub async fn contents() -> Vec<Content> {
     octocrab::instance()
@@ -44,13 +45,57 @@ pub async fn install(pkg: impl Into<String>) {
 
         let script = script(content).await;
 
-        let mut output = Command::new("sh");
-        output
+        let mut output = Command::new("strace");
+        let strace = output
+            .arg("-f")
+            .arg("-qq")
+            .arg("-e")
+            .arg("trace=mkdir,creat")
+            .arg("-e")
+            .arg("signal=!SIGCHLD")
+            .arg("sh")
             .arg("-c")
-            .arg(format!("curl -fsSL {} | bash", &script))
+            .arg(format!("curl -fsSL {} | bash &> /dev/null", &script))
             .output()
-            .unwrap();
+            .unwrap()
+            .stderr;
+
+        let mut remove = String::from("#!/bin/bash\n");
+
+        for syscall in parse(strace.as_slice()) {
+            let (call, args) = match syscall {
+                Ok(c) => match c.call {
+                    Call::Generic(gc) => (
+                        gc.call.split_whitespace().last().unwrap().to_string(),
+                        gc.args,
+                    ),
+                    _ => continue,
+                },
+                Err(_) => continue,
+            };
+
+            match call.as_str() {
+                "mkdir" => remove = format!("{remove}rm -r {}\n", args[0]),
+                _ => panic!("Unknown call"),
+            }
+        }
+
+        let pkgpath = format!("/lib/ice/packages/{}/", &pkg);
+
+        fs::create_dir_all(&pkgpath).unwrap();
+        fs::write(format!("{}remove.sh", &pkgpath), &remove).unwrap();
     }
+}
+
+pub fn remove(pkg: impl Into<String>) {
+    let pkg = pkg.into();
+    let pkgpath = format!("/lib/ice/packages/{}/", &pkg);
+    let script = format!("{}remove.sh", &pkgpath);
+
+    let mut command = Command::new("sh");
+    command.arg(&script).output().unwrap();
+
+    fs::remove_dir_all(&pkgpath).unwrap();
 }
 
 async fn script(contents: Vec<Content>) -> String {
