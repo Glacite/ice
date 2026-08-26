@@ -92,7 +92,7 @@ pub async fn install(pkg: impl Into<String>) {
 pub fn remove(pkg: impl Into<String>) {
     let pkg = pkg.into();
     let pkgpath = format!("{PKGSPATH}{}/", &pkg);
-    let script = format!("{pkgpath}{}remove.sh", &pkg);
+    let script = format!("{pkgpath}remove.sh");
 
     let mut command = Command::new("sh");
     command.arg(&script).output().unwrap();
