@@ -24,9 +24,18 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Select {
-    Install { name: String },
-    Remove { name: String },
-    Search { name: String },
+    Install {
+        name: String,
+
+        #[arg(long = "yes")]
+        yes: bool,
+    },
+    Remove {
+        name: String,
+    },
+    Search {
+        name: String,
+    },
 }
 
 enum Ask {
@@ -39,14 +48,20 @@ async fn main() {
     let args = Args::parse();
 
     match args.select {
-        Select::Install { name } => match check() {
+        Select::Install { name, yes } => match check() {
             RunningAs::Root => match search(&name).await {
                 true => match is_installed(&name) {
                     false => {
                         package_found(&name);
-                        print!("{}", "Do you want to install it? ".bold());
-                        io::stdout().flush().unwrap();
-                        match ask(Ask::Yes) {
+                        let ask = if !yes {
+                            print!("{}", "Do you want to install it? ".bold());
+                            io::stdout().flush().unwrap();
+
+                            ask(Ask::Yes)
+                        } else {
+                            Some(Ask::Yes)
+                        };
+                        match ask {
                             Some(a) => match a {
                                 Ask::Yes => {
                                     let bar = ProgressBar::new_spinner();
