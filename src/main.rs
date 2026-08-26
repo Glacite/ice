@@ -25,7 +25,7 @@ struct Args {
 #[derive(Subcommand, Debug)]
 enum Select {
     Install {
-        name: String,
+        names: Vec<String>,
 
         #[arg(long = "yes")]
         yes: bool,
@@ -48,43 +48,57 @@ async fn main() {
     let args = Args::parse();
 
     match args.select {
-        Select::Install { name, yes } => match check() {
-            RunningAs::Root => match search(&name).await {
-                true => match is_installed(&name) {
-                    false => {
-                        package_found(&name);
-                        let ask = if !yes {
-                            print!("{}", "Do you want to install it? ".bold());
-                            io::stdout().flush().unwrap();
-
-                            ask(Ask::Yes)
+        Select::Install { names, yes } => match check() {
+            RunningAs::Root => {
+                let mut found: Vec<String> = Vec::new();
+                for name in names {
+                    if search(&name).await {
+                        if is_installed(&name) {
+                            already_installed(&name);
+                            std::process::exit(1);
                         } else {
-                            Some(Ask::Yes)
-                        };
-                        match ask {
-                            Some(a) => match a {
-                                Ask::Yes => {
-                                    let bar = ProgressBar::new_spinner();
-                                    bar.set_style(
-                                        ProgressStyle::default_spinner().tick_strings(LOAD),
-                                    );
-                                    bar.enable_steady_tick(Duration::from_millis(100));
-                                    bar.set_message("| Installing...");
-
-                                    install(&name).await;
-
-                                    bar.set_message("| Installed");
-                                    bar.finish();
-                                }
-                                Ask::No => (),
-                            },
-                            None => unknown_action(),
+                            found.push(name);
                         }
+                    } else {
+                        package_not_found(&name);
+                        std::process::exit(1);
                     }
-                    true => already_installed(&name),
-                },
-                false => package_not_found(&name),
-            },
+                }
+
+                println!("{}", format!("Found packages ({}):", found.len()).bold());
+                for name in &found {
+                    println!("{name}");
+                }
+                println!();
+
+                let ask = if yes {
+                    Some(Ask::Yes)
+                } else {
+                    print!("{}", "Do you want to install it? ".bold());
+                    io::stdout().flush().unwrap();
+                    ask(Ask::Yes)
+                };
+
+                match ask {
+                    Some(a) => match a {
+                        Ask::Yes => {
+                            for name in found {
+                                let bar = ProgressBar::new_spinner();
+                                bar.set_style(ProgressStyle::default_spinner().tick_strings(LOAD));
+                                bar.enable_steady_tick(Duration::from_millis(100));
+                                bar.set_message(format!("| Installing {}...", name.green()));
+
+                                install(&name).await;
+
+                                bar.set_message(format!("| Installed {}", name.green()));
+                                bar.finish();
+                            }
+                        }
+                        Ask::No => (),
+                    },
+                    None => unknown_action(),
+                }
+            }
             _ => root_required(),
         },
         Select::Remove { name } => match check() {
