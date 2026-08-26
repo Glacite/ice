@@ -50,6 +50,8 @@ async fn main() {
     match args.select {
         Select::Install { names, yes } => match check() {
             RunningAs::Root => {
+                github_check();
+
                 let mut found: Vec<String> = Vec::new();
                 for name in names {
                     if search(&name).await {
@@ -122,10 +124,13 @@ async fn main() {
             },
             _ => root_required(),
         },
-        Select::Search { name } => match search(&name).await {
-            true => package_found(&name),
-            false => package_not_found(&name),
-        },
+        Select::Search { name } => {
+            github_check();
+            match search(&name).await {
+                true => package_found(&name),
+                false => package_not_found(&name),
+            }
+        }
     }
 }
 
@@ -190,4 +195,14 @@ fn already_installed(pkg: impl Into<String>) {
 
 fn unknown_action() {
     println!("{}", "Unknown action".red());
+}
+
+fn github_check() {
+    if !github_ping() {
+        println!(
+            "{}",
+            "Can't reach GitHub servers\nCheck your internet connection".red()
+        );
+        std::process::exit(1);
+    }
 }

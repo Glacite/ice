@@ -1,6 +1,6 @@
 use octocrab::models::repos::Content;
 use reqwest;
-use std::{fs, process::Command};
+use std::{fs, net::TcpStream, process::Command};
 use strace_parse::raw::{Call, parse};
 
 pub static PKGSPATH: &str = "/usr/lib/ice/packages/";
@@ -108,6 +108,10 @@ pub fn is_installed(pkg: impl Into<String>) -> bool {
         },
         Err(_) => false,
     }
+}
+
+pub fn github_ping() -> bool {
+    TcpStream::connect("github.com:443").is_ok()
 }
 
 async fn script(contents: Vec<Content>) -> String {
