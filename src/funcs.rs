@@ -1,4 +1,5 @@
 use octocrab::models::repos::Content;
+use reqwest;
 use std::{fs, process::Command};
 use strace_parse::raw::{Call, parse};
 
@@ -45,8 +46,6 @@ pub async fn install(pkg: impl Into<String>) {
             .unwrap()
             .take_items();
 
-        let script = script(content).await;
-
         let mut output = Command::new("strace");
         let strace = output
             .arg("-f")
@@ -57,7 +56,7 @@ pub async fn install(pkg: impl Into<String>) {
             .arg("signal=!SIGCHLD")
             .arg("sh")
             .arg("-c")
-            .arg(format!("curl -fsSL {} | bash &> /dev/null", &script))
+            .arg(format!("{{\n{}\n}} >/dev/null 2>&1", script(content).await))
             .output()
             .unwrap()
             .stderr;
@@ -112,11 +111,13 @@ pub fn is_installed(pkg: impl Into<String>) -> bool {
 }
 
 async fn script(contents: Vec<Content>) -> String {
-    contents
+    let url = contents
         .iter()
         .find(|c| c.r#name == "package.sh")
         .unwrap()
         .download_url
         .clone()
-        .unwrap()
+        .unwrap();
+
+    reqwest::get(url).await.unwrap().text().await.unwrap()
 }
