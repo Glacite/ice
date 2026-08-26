@@ -100,6 +100,17 @@ pub fn remove(pkg: impl Into<String>) {
     fs::remove_dir_all(pkgpath).unwrap();
 }
 
+pub fn is_installed(pkg: impl Into<String>) -> bool {
+    let pkg = pkg.into();
+    match fs::read_dir(PKGSPATH) {
+        Ok(mut d) => match d.find(|f| f.as_ref().unwrap().file_name().to_str().unwrap() == &pkg) {
+            Some(_) => true,
+            None => false,
+        },
+        Err(_) => false,
+    }
+}
+
 async fn script(contents: Vec<Content>) -> String {
     contents
         .iter()

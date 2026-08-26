@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::{
-    env, fs,
+    env,
     io::{self, Write},
     time::Duration,
 };
@@ -41,55 +41,55 @@ async fn main() {
     match args.select {
         Select::Install { name } => match check() {
             RunningAs::Root => match search(&name).await {
-                true => {
-                    package_found(&name);
-                    print!("{}", "Do you want to install it? ".bold());
-                    io::stdout().flush().unwrap();
-                    match ask(Ask::Yes) {
-                        Some(a) => match a {
-                            Ask::Yes => {
-                                let bar = ProgressBar::new_spinner();
-                                bar.set_style(ProgressStyle::default_spinner().tick_strings(LOAD));
-                                bar.enable_steady_tick(Duration::from_millis(100));
-                                bar.set_message("| Installing...");
+                true => match is_installed(&name) {
+                    false => {
+                        package_found(&name);
+                        print!("{}", "Do you want to install it? ".bold());
+                        io::stdout().flush().unwrap();
+                        match ask(Ask::Yes) {
+                            Some(a) => match a {
+                                Ask::Yes => {
+                                    let bar = ProgressBar::new_spinner();
+                                    bar.set_style(
+                                        ProgressStyle::default_spinner().tick_strings(LOAD),
+                                    );
+                                    bar.enable_steady_tick(Duration::from_millis(100));
+                                    bar.set_message("| Installing...");
 
-                                install(&name).await;
+                                    install(&name).await;
 
-                                bar.set_message("| Installed");
-                                bar.finish();
-                            }
-                            Ask::No => (),
-                        },
-                        None => unknown_action(),
+                                    bar.set_message("| Installed");
+                                    bar.finish();
+                                }
+                                Ask::No => (),
+                            },
+                            None => unknown_action(),
+                        }
                     }
-                }
+                    true => already_installed(&name),
+                },
                 false => package_not_found(&name),
             },
             _ => root_required(),
         },
         Select::Remove { name } => match check() {
-            RunningAs::Root => match fs::read_dir(PKGSPATH) {
-                Ok(mut d) => {
-                    match d.find(|f| f.as_ref().unwrap().file_name().to_str().unwrap() == &name) {
-                        Some(_) => {
-                            package_found(&name);
-                            print!("{}", "Do you want to remove it? ".bold());
-                            io::stdout().flush().unwrap();
-                            match ask(Ask::Yes) {
-                                Some(a) => match a {
-                                    Ask::Yes => {
-                                        remove(&name);
-                                        removed_pkg(&name);
-                                    }
-                                    _ => {}
-                                },
-                                None => unknown_action(),
+            RunningAs::Root => match is_installed(&name) {
+                true => {
+                    package_found(&name);
+                    print!("{}", "Do you want to remove it? ".bold());
+                    io::stdout().flush().unwrap();
+                    match ask(Ask::Yes) {
+                        Some(a) => match a {
+                            Ask::Yes => {
+                                remove(&name);
+                                removed_pkg(&name);
                             }
-                        }
-                        None => pkg_not_installed(&name),
+                            _ => {}
+                        },
+                        None => unknown_action(),
                     }
                 }
-                Err(_) => no_pkg_installed(),
+                false => pkg_not_installed(&name),
             },
             _ => root_required(),
         },
@@ -149,13 +149,14 @@ fn pkg_not_installed(pkg: impl Into<String>) {
     println!("Package {} is not installed", pkg.red());
 }
 
-fn no_pkg_installed() {
-    println!("{}", "You have no packages installed".red())
-}
-
 fn removed_pkg(pkg: impl Into<String>) {
     let pkg = pkg.into();
     println!("Removed {} package", pkg.green());
+}
+
+fn already_installed(pkg: impl Into<String>) {
+    let pkg = pkg.into();
+    println!("Package {} is already installed", pkg.red());
 }
 
 fn unknown_action() {
