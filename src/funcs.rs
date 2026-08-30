@@ -1,9 +1,23 @@
 use octocrab::models::repos::Content;
 use reqwest;
-use std::{fs, net::TcpStream, process::Command};
+//use serde::Deserialize;
+use std::{fs, net::TcpStream, path::PathBuf, process::Command};
 use strace_parse::raw::{Call, parse};
 
-pub static PKGSPATH: &str = "/usr/lib/ice/packages/";
+/*
+#[derive(Deserialize)]
+struct Meta {
+    dependencies: Option<Dependencies>,
+}
+
+#[derive(Deserialize)]
+struct Dependencies {
+    setup: Vec<String>,
+    runtime: Vec<String>,
+}
+*/
+
+pub const PKGSPATH: &str = "/usr/lib/ice/packages/";
 
 pub async fn contents() -> Vec<Content> {
     octocrab::instance()
@@ -124,4 +138,41 @@ async fn script(contents: Vec<Content>) -> String {
         .unwrap();
 
     reqwest::get(url).await.unwrap().text().await.unwrap()
+}
+
+pub async fn fetch(url: impl Into<String>, output: Option<PathBuf>) -> Result<(), String> {
+    let url = url.into();
+    let file = match reqwest::get(&url).await {
+        Ok(r) => r.bytes().await.unwrap(),
+        Err(e) => return Err(e.to_string()),
+    };
+
+    let name = name_from_url(&url);
+
+    let mut dir: PathBuf;
+    match output {
+        None => {
+            dir = std::env::current_dir().unwrap();
+            dir.push(name);
+        }
+        Some(p) => {
+            dir = p;
+            match &dir.is_dir() {
+                true => {
+                    fs::create_dir_all(&dir).unwrap();
+                    dir.push(name);
+                }
+                false => {
+                    fs::create_dir_all(&dir.parent().unwrap()).unwrap();
+                }
+            }
+        }
+    }
+    fs::write(&dir, &file).unwrap();
+
+    Ok(())
+}
+
+fn name_from_url(url: impl Into<String>) -> String {
+    url.into().split("/").last().unwrap().into()
 }

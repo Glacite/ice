@@ -7,6 +7,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::{
     env,
     io::{self, Write},
+    path::PathBuf,
     time::Duration,
 };
 use sudo::{RunningAs, check};
@@ -35,6 +36,12 @@ enum Select {
     },
     Search {
         name: String,
+    },
+    Fetch {
+        url: String,
+
+        #[arg(short, long = "output")]
+        output: Option<PathBuf>,
     },
 }
 
@@ -131,6 +138,10 @@ async fn main() {
                 false => package_not_found(&name),
             }
         }
+        Select::Fetch { url, output } => match fetch(url, output).await {
+            Ok(_) => (),
+            Err(e) => println!("{e}"),
+        },
     }
 }
 
